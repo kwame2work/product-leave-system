@@ -916,7 +916,7 @@
                 generateWhatsAppText(newRecord, workingDates);
             }).catch(err => {
                 console.error("Save failed:", err);
-                alert("儲存請假紀錄失敗，請重試！");
+                alert("儲存請假紀錄失敗！\n錯誤原因: " + (err.message || err.code || err));
             });
         }
 
@@ -1062,6 +1062,9 @@
                 document.getElementById('admin-add-name').value = '';
                 document.getElementById('admin-add-password').value = '';
                 alert('已成功新增同事！');
+            }).catch(err => {
+                console.error("Add staff failed:", err);
+                alert("新增同事失敗！\n錯誤原因: " + (err.message || err.code || err));
             });
         }
 
