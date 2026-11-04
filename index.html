@@ -643,27 +643,33 @@
                 const isWknd = dayOfWeek === 0 || dayOfWeek === 6;
                 const holidayName = window.AppState.holidays[dateStr];
 
-                const leaves = getLeavesOnDate(dateStr);
+                // 公眾假期或週末非工作天：請假不生效/不顯示請假條目
+                const isNonWorkingDay = isWknd || !!holidayName;
+                const rawLeaves = getLeavesOnDate(dateStr);
+                // 如果是公眾假期或週末，過濾掉該日的請假顯示
+                const leaves = isNonWorkingDay ? [] : rawLeaves;
 
                 // Check overlap rule for color indicator: >= 3 persons in same slot => Red Warning
                 let maxConcurrent = 0;
-                ['AM', 'PM'].forEach(slot => {
-                    const count = leaves.filter(r => r.slot === 'FULL' || r.slot === slot).length;
-                    if (count > maxConcurrent) maxConcurrent = count;
-                });
+                if (!isNonWorkingDay) {
+                    ['AM', 'PM'].forEach(slot => {
+                        const count = leaves.filter(r => r.slot === 'FULL' || r.slot === slot).length;
+                        if (count > maxConcurrent) maxConcurrent = count;
+                    });
+                }
 
                 const cell = document.createElement('div');
                 cell.className = `h-20 p-1 rounded-xl border flex flex-col justify-between transition relative overflow-hidden cursor-pointer ${
-                    holidayName ? 'bg-amber-50/60 border-amber-200' : isWknd ? 'bg-slate-100/60 border-slate-200' : 'bg-white border-slate-200 hover:border-indigo-300'
+                    holidayName ? 'bg-amber-50 border-amber-300' : isWknd ? 'bg-slate-100/60 border-slate-200' : 'bg-white border-slate-200 hover:border-indigo-300'
                 }`;
 
                 cell.onclick = () => showDateDetailModal(dateStr, holidayName, leaves);
 
                 let headerHtml = `<div class="flex justify-between items-center text-[10px] font-bold">
-                    <span class="${isWknd ? 'text-slate-400' : 'text-slate-700'}">${day}</span>`;
+                    <span class="${isWknd ? 'text-slate-400' : holidayName ? 'text-amber-800' : 'text-slate-700'}">${day}</span>`;
 
                 if (holidayName) {
-                    headerHtml += `<span class="truncate text-[9px] text-amber-700 bg-amber-100 px-1 rounded">${holidayName}</span>`;
+                    headerHtml += `<span class="truncate text-[8px] text-amber-800 bg-amber-200 px-1 rounded font-semibold">${holidayName}</span>`;
                 }
                 headerHtml += `</div>`;
 
@@ -677,6 +683,8 @@
                             ${l.staffName}${slotBadge}
                         </div>`;
                     });
+                } else if (holidayName) {
+                    contentHtml += `<div class="text-[9px] text-amber-700 font-medium py-1">公眾假期</div>`;
                 }
                 contentHtml += `</div>`;
 
@@ -694,61 +702,143 @@
 
         // Show detailed pop-up on date click
         function showDateDetailModal(dateStr, holidayName, leaves) {
-            document.getElementById('modal-date-title').textContent = `${dateStr} 請假詳情`;
-            const contentDiv = document.getElementById('modal-date-content');
-            contentDiv.innerHTML = '';
+            const titleEl = document.getElementById('modal-date-title');
+            const contentEl = document.getElementById('modal-date-content');
+
+            titleEl.textContent = `${dateStr} ${holidayName ? '（' + holidayName + '）' : ''}`;
+            contentEl.innerHTML = '';
 
             if (holidayName) {
-                const hol = document.createElement('div');
-                hol.className = 'p-2 bg-amber-50 text-amber-800 rounded-xl font-medium text-xs mb-2 border border-amber-200';
-                hol.innerHTML = `<i class="fa-solid fa-star mr-1"></i>香港公眾假期：${holidayName}`;
-                contentDiv.appendChild(hol);
+                const holidayDiv = document.createElement('div');
+                holidayDiv.className = 'bg-amber-50 border border-amber-200 text-amber-800 p-2.5 rounded-xl font-medium';
+                holidayDiv.innerHTML = `<i class="fa-solid fa-umbrella-beach mr-1"></i>香港公眾假期：${holidayName}`;
+                contentEl.appendChild(holidayDiv);
             }
 
             if (leaves.length === 0) {
-                contentDiv.innerHTML += `<p class="text-slate-400 py-3 text-center">當天沒有同事請假</p>`;
+                if (!holidayName) {
+                    contentEl.innerHTML = `<div class="text-slate-400 py-4 text-center">當天暫無同事請假</div>`;
+                }
             } else {
                 leaves.forEach(l => {
                     const item = document.createElement('div');
-                    item.className = 'p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex justify-between items-center';
+                    item.className = 'bg-slate-50 border border-slate-200 p-2.5 rounded-xl flex justify-between items-center';
+                    const slotText = l.slot === 'FULL' ? '全日' : l.slot === 'AM' ? '上午 (AM)' : '下午 (PM)';
                     item.innerHTML = `
                         <div>
-                            <span class="font-bold text-slate-800">${l.staffName}</span>
-                            <span class="text-[10px] text-slate-500 block">${l.leaveType}</span>
+                            <span class="font-bold text-slate-800 block">${l.staffName}</span>
+                            <span class="text-[10px] text-indigo-600 font-medium">${l.leaveType}</span>
                         </div>
-                        <span class="px-2 py-1 bg-indigo-50 text-indigo-700 rounded-lg font-semibold text-[10px]">
-                            ${l.slot === 'FULL' ? '全日' : l.slot === 'AM' ? '上午 (AM)' : '下午 (PM)'}
-                        </span>
+                        <span class="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded text-[10px] font-semibold">${slotText}</span>
                     `;
-                    contentDiv.appendChild(item);
+                    contentEl.appendChild(item);
                 });
             }
 
             document.getElementById('modal-date-detail').classList.remove('hidden');
         }
 
-        function closeModal(id) {
-            document.getElementById(id).classList.add('hidden');
+        // Close Modal
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.add('hidden');
         }
 
-        // Render Usage Stats
-        function renderLeaveStats() {
-            const currentYear = new Date().getFullYear();
-            document.getElementById('stats-year-title').textContent = `${currentYear} `;
+        // Calculate working days (Exclude Sat, Sun, HK Public Holidays)
+        function calculateWorkingDays(startDateStr, endDateStr) {
+            let start = new Date(startDateStr);
+            let end = new Date(endDateStr);
+            let count = 0;
 
-            const userLeaves = window.AppState.leaveRecords.filter(r => {
-                const year = new Date(r.startDate).getFullYear();
-                return r.staffName === window.AppState.currentUser.name && year === currentYear;
-            });
+            let cur = new Date(start);
+            while (cur <= end) {
+                const dayOfWeek = cur.getDay();
+                const year = cur.getFullYear();
+                const month = String(cur.getMonth() + 1).padStart(2, '0');
+                const day = String(cur.getDate()).padStart(2, '0');
+                const curStr = `${year}-${month}-${day}`;
+
+                // 排除週末與公眾假期
+                if (dayOfWeek !== 0 && dayOfWeek !== 6 && !window.AppState.holidays[curStr]) {
+                    count++;
+                }
+                cur.setDate(cur.getDate() + 1);
+            }
+            return count;
+        }
+
+        // Auto calculate end date for Block / Birthday leave
+        function autoSetEndDate() {
+            const startInput = document.getElementById('apply-start-date');
+            const endInput = document.getElementById('apply-end-date');
+            const leaveType = document.getElementById('apply-type').value;
+
+            if (!startInput.value) return;
+
+            if (leaveType === 'Birthday Leave') {
+                endInput.value = startInput.value;
+            } else if (leaveType === 'Block Leave') {
+                let count = 0;
+                let cur = new Date(startInput.value);
+                while (count < 5) {
+                    const dayOfWeek = cur.getDay();
+                    const year = cur.getFullYear();
+                    const month = String(cur.getMonth() + 1).padStart(2, '0');
+                    const day = String(cur.getDate()).padStart(2, '0');
+                    const curStr = `${year}-${month}-${day}`;
+
+                    if (dayOfWeek !== 0 && dayOfWeek !== 6 && !window.AppState.holidays[curStr]) {
+                        count++;
+                        if (count === 5) break;
+                    }
+                    cur.setDate(cur.getDate() + 1);
+                }
+                const resYear = cur.getFullYear();
+                const resMonth = String(cur.getMonth() + 1).padStart(2, '0');
+                const resDay = String(cur.getDate()).padStart(2, '0');
+                endInput.value = `${resYear}-${resMonth}-${resDay}`;
+            }
+        }
+
+        // Handle leave type UI changes
+        function handleLeaveTypeChange() {
+            const type = document.getElementById('apply-type').value;
+            const slotContainer = document.getElementById('single-slot-container');
+            const endInput = document.getElementById('apply-end-date');
+
+            if (type === 'Birthday Leave' || type === 'Block Leave') {
+                slotContainer.classList.add('hidden');
+                document.getElementById('apply-slot').value = 'FULL';
+                autoSetEndDate();
+                endInput.readOnly = true;
+            } else {
+                slotContainer.classList.remove('hidden');
+                endInput.readOnly = false;
+            }
+        }
+
+        // Render User Annual Leave Stats
+        function renderLeaveStats() {
+            const currUser = window.AppState.currentUser;
+            if (!currUser) return;
+
+            const year = new Date().getFullYear();
+            document.getElementById('stats-year-title').textContent = `${year} `;
 
             let slDays = 0, alDays = 0, blDays = 0, blockDays = 0;
 
-            userLeaves.forEach(r => {
-                const days = calculateWorkingDays(r.startDate, r.endDate, r.slot);
-                if (r.leaveType === 'Sick Leave') slDays += days;
-                if (r.leaveType === 'Annual Leave') alDays += days;
-                if (r.leaveType === 'Birthday Leave') blDays += days;
-                if (r.leaveType === 'Block Leave') blockDays += days;
+            window.AppState.leaveRecords.forEach(rec => {
+                if (rec.staffName === currUser.name) {
+                    const recYear = new Date(rec.startDate).getFullYear();
+                    if (recYear === year) {
+                        const days = calculateWorkingDays(rec.startDate, rec.endDate);
+                        const numDays = rec.slot === 'FULL' ? days : days * 0.5;
+
+                        if (rec.leaveType === 'Sick Leave') slDays += numDays;
+                        else if (rec.leaveType === 'Annual Leave') alDays += numDays;
+                        else if (rec.leaveType === 'Birthday Leave') blDays += numDays;
+                        else if (rec.leaveType === 'Block Leave') blockDays += numDays;
+                    }
+                }
             });
 
             document.getElementById('stat-sl').textContent = `${slDays} 天`;
@@ -757,370 +847,305 @@
             document.getElementById('stat-block').textContent = `${blockDays} / 5 天`;
         }
 
-        // Calculate active working days between range (excluding weekend & HK holidays)
-        function calculateWorkingDays(startStr, endStr, slot) {
-            let count = 0;
-            let current = new Date(startStr);
-            const end = new Date(endStr);
-
-            while (current <= end) {
-                const year = current.getFullYear();
-                const m = String(current.getMonth() + 1).padStart(2, '0');
-                const d = String(current.getDate()).padStart(2, '0');
-                const dateStr = `${year}-${m}-${d}`;
-
-                // 檢查是否為工作天 (非週末 且 非香港公眾假期)
-                if (!isWeekend(current) && !window.AppState.holidays[dateStr]) {
-                    count += (slot === 'FULL' ? 1 : 0.5);
-                }
-                current.setDate(current.getDate() + 1);
-            }
-            return count;
-        }
-
-        // Get array of valid working dates in range
-        function getWorkingDatesInRange(startStr, endStr) {
-            const list = [];
-            let current = new Date(startStr);
-            const end = new Date(endStr);
-
-            while (current <= end) {
-                const dateStr = current.toISOString().split('T')[0];
-                if (!isWeekend(current) && !window.AppState.holidays[dateStr]) {
-                    list.push(dateStr);
-                }
-                current.setDate(current.getDate() + 1);
-            }
-            return list;
-        }
-
-        // Handle Type selection changes
-        function handleLeaveTypeChange() {
-            const type = document.getElementById('apply-type').value;
-            const slotContainer = document.getElementById('single-slot-container');
-            const slotSelect = document.getElementById('apply-slot');
-
-            if (type === 'Block Leave') {
-                slotContainer.classList.add('hidden');
-                slotSelect.value = 'FULL';
-            } else {
-                slotContainer.classList.remove('hidden');
-            }
-            autoSetEndDate();
-        }
-
-        // Auto end date helper for block leave & single day
-        function autoSetEndDate() {
-            const type = document.getElementById('apply-type').value;
-            const startVal = document.getElementById('apply-start-date').value;
-            if (!startVal) return;
-
-            if (type === 'Block Leave') {
-                let current = new Date(startVal);
-                let added = 0;
-                while (added < 5) {
-                    const dateStr = current.toISOString().split('T')[0];
-                    if (!isWeekend(current) && !window.AppState.holidays[dateStr]) {
-                        added++;
-                        if (added === 5) break;
-                    }
-                    current.setDate(current.getDate() + 1);
-                }
-                document.getElementById('apply-end-date').value = current.toISOString().split('T')[0];
-            } else if (type === 'Birthday Leave') {
-                document.getElementById('apply-end-date').value = startVal;
-            }
-        }
-
-        // Form Submit: Apply Leave
-        function handleApplyLeave(e) {
+        // Handle Apply Leave Form Submission
+        async function handleApplyLeave(e) {
             e.preventDefault();
-            const type = document.getElementById('apply-type').value;
+            const currUser = window.AppState.currentUser;
+            if (!currUser) return;
+
+            const leaveType = document.getElementById('apply-type').value;
             const slot = document.getElementById('apply-slot').value;
             const startDate = document.getElementById('apply-start-date').value;
             const endDate = document.getElementById('apply-end-date').value;
-            const currentYear = new Date().getFullYear();
 
-            if (startDate > endDate) {
-                alert('結束日期不能早於開始日期！');
+            if (new Date(startDate) > new Date(endDate)) {
+                alert('開始日期不可以遲於結束日期！');
                 return;
             }
 
-            // Check working days
-            const workingDates = getWorkingDatesInRange(startDate, endDate);
-            if (workingDates.length === 0) {
-                alert('所選日期範圍內沒有工作天！');
+            const workingDays = calculateWorkingDays(startDate, endDate);
+            if (workingDays === 0) {
+                alert('所選期間沒有工作天，無法申請假期！');
                 return;
             }
 
-            // Birthday Leave Rule: Max 1 day/year
-            if (type === 'Birthday Leave') {
-                const year = new Date(startDate).getFullYear();
-                const existingBL = window.AppState.leaveRecords.some(r =>
-                    r.staffName === window.AppState.currentUser.name &&
-                    r.leaveType === 'Birthday Leave' &&
-                    new Date(r.startDate).getFullYear() === year
-                );
-                if (existingBL) {
-                    alert('每年只能申請 1 天 Birthday Leave！');
-                    return;
-                }
-                if (workingDates.length > 1) {
-                    alert('Birthday Leave 只能申請 1 天！');
-                    return;
-                }
-            }
+            // Rules Validation
+            const year = new Date(startDate).getFullYear();
+            let blCount = 0, blockCount = 0;
 
-            // Block Leave Rule: Must be 5 consecutive working days & 1 per year
-            if (type === 'Block Leave') {
-                const year = new Date(startDate).getFullYear();
-                const existingBlock = window.AppState.leaveRecords.some(r =>
-                    r.staffName === window.AppState.currentUser.name &&
-                    r.leaveType === 'Block Leave' &&
-                    new Date(r.startDate).getFullYear() === year
-                );
-                if (existingBlock) {
-                    alert('每年只能申請 1 次 Block Leave！');
-                    return;
-                }
-                if (workingDates.length !== 5) {
-                    alert('Block Leave 必須為連續 5 個工作天！');
-                    return;
-                }
-            }
-
-            // Check Concurrency Warning (warn if > 2, alert, but allow continuing)
-            let hasOverTwo = false;
-            workingDates.forEach(d => {
-                const leaves = getLeavesOnDate(d);
-                const count = leaves.filter(r => slotsOverlap(r.slot, slot)).length;
-                if (count >= 2) {
-                    hasOverTwo = true;
+            window.AppState.leaveRecords.forEach(r => {
+                if (r.staffName === currUser.name && new Date(r.startDate).getFullYear() === year) {
+                    if (r.leaveType === 'Birthday Leave') blCount++;
+                    if (r.leaveType === 'Block Leave') blockCount++;
                 }
             });
 
-            if (hasOverTwo) {
-                alert('【溫馨提示】該時段已有 2 位或以上的同事請假！重複時段將會顯示為重疊狀態。');
+            if (leaveType === 'Birthday Leave' && blCount >= 1) {
+                alert('每年只有 1 天 Birthday Leave！');
+                return;
+            }
+            if (leaveType === 'Block Leave' && blockCount >= 1) {
+                alert('每年只可以申請 1 次 Block Leave！');
+                return;
+            }
+            if (leaveType === 'Block Leave' && workingDays !== 5) {
+                alert('Block Leave 必須為連續 5 個工作天！');
+                return;
             }
 
-            // Write to Firebase Realtime Database
-            const newRecord = {
-                staffName: window.AppState.currentUser.name,
-                leaveType: type,
-                slot: slot,
-                startDate: startDate,
-                endDate: endDate,
-                createdAt: new Date().toISOString()
-            };
+            // Check Concurrency Limit (2 limit warning)
+            let maxOverlap = 0;
+            let overlapDetails = [];
+            let cur = new Date(startDate);
+            let finish = new Date(endDate);
 
-            const db = window.AppState.db;
-            const appId = window.AppState.appId;
-            const leavesRef = window.AppState.ref(db, `artifacts/${appId}/public/data/leaves`);
-            const newLeafRef = window.AppState.push(leavesRef);
-            
-            window.AppState.set(newLeafRef, newRecord).then(() => {
-                // Generate and display WhatsApp text content
-                generateWhatsAppText(newRecord, workingDates);
-            }).catch(err => {
-                console.error("Save failed:", err);
-                alert("儲存請假紀錄失敗！\n錯誤原因: " + (err.message || err.code || err));
-            });
+            while (cur <= finish) {
+                const dayOfWeek = cur.getDay();
+                const yearNum = cur.getFullYear();
+                const monthNum = String(cur.getMonth() + 1).padStart(2, '0');
+                const dayNum = String(cur.getDate()).padStart(2, '0');
+                const dateStr = `${yearNum}-${monthNum}-${dayNum}`;
+
+                if (dayOfWeek !== 0 && dayOfWeek !== 6 && !window.AppState.holidays[dateStr]) {
+                    const existingLeaves = getLeavesOnDate(dateStr);
+                    const concurrentLeaves = existingLeaves.filter(r => slotsOverlap(r.slot, slot));
+                    if (concurrentLeaves.length >= 2) {
+                        overlapDetails.push(`${dateStr} 已有 ${concurrentLeaves.length} 人請假`);
+                    }
+                    if (concurrentLeaves.length > maxOverlap) maxOverlap = concurrentLeaves.length;
+                }
+                cur.setDate(cur.getDate() + 1);
+            }
+
+            if (maxOverlap >= 2) {
+                const confirmApply = confirm(`警告：同一時段已有多於兩個人請假！\n${overlapDetails.join('\n')}\n\n是否仍然繼續提交申請？`);
+                if (!confirmApply) return;
+            }
+
+            // Save to Firebase
+            try {
+                const newRecord = {
+                    staffName: currUser.name,
+                    leaveType,
+                    slot,
+                    startDate,
+                    endDate,
+                    createdAt: new Date().toISOString()
+                };
+
+                const appId = window.AppState.appId || 'product-leave-system-v1';
+                const leaveRef = window.AppState.ref(window.AppState.db, `artifacts/${appId}/public/data/leaves`);
+                const newRef = window.AppState.push(leaveRef);
+                await window.AppState.set(newRef, newRecord);
+
+                generateWhatsAppText(currUser.name, leaveType, slot, startDate, endDate);
+                document.getElementById('modal-share-text').classList.remove('hidden');
+
+            } catch (err) {
+                console.error("Firebase Error:", err);
+                alert("儲存失敗，請檢查網絡或 Firebase 設定：" + err.message);
+            }
         }
 
-        // Variable to hold current generated text
-        let currentShareText = '';
+        // Generate WhatsApp Share Message
+        function generateWhatsAppText(staffName, leaveType, slot, startDate, endDate) {
+            const slotName = slot === 'FULL' ? '全日' : slot === 'AM' ? '上午 (AM)' : '下午 (PM)';
+            let msg = `📅 【產品組請假通知】\n`;
+            msg += `👤 同事：${staffName}\n`;
+            msg += `🏷️ 類別：${leaveType}\n`;
+            msg += `⏰ 時段：${slotName}\n`;
+            msg += `🗓️ 日期：${startDate} 至 ${endDate}\n`;
+            msg += `-----------------------------\n`;
+            msg += `同期同事請假狀況：\n`;
 
-        // Generate WhatsApp formatted text message
-        function generateWhatsAppText(record, workingDates) {
-            let msg = `📅 *【產品組請假通知】*\n`;
-            msg += `👤 申請人：${record.staffName}\n`;
-            msg += `📋 假種：${record.leaveType}\n`;
-            msg += `🗓️ 期間：${record.startDate} 至 ${record.endDate} (${record.slot === 'FULL' ? '全日' : record.slot === 'AM' ? '上午' : '下午'})\n\n`;
-            msg += `🔍 *【期間同事請假及重疊情況】*\n`;
+            let cur = new Date(startDate);
+            let finish = new Date(endDate);
+            let totalOverlap = 0;
 
-            let hasOverlapOverall = false;
+            while (cur <= finish) {
+                const dayOfWeek = cur.getDay();
+                const yearNum = cur.getFullYear();
+                const monthNum = String(cur.getMonth() + 1).padStart(2, '0');
+                const dayNum = String(cur.getDate()).padStart(2, '0');
+                const dateStr = `${yearNum}-${monthNum}-${dayNum}`;
 
-            workingDates.forEach((dateStr) => {
-                const leavesOnDay = getLeavesOnDate(dateStr);
-                // Exclude current applicant's newly created leave record from overlap check list for clear parsing, or mark it distinctly
-                const otherLeaves = leavesOnDay.filter(l => l.id !== record.id && l.staffName !== record.staffName);
-                
-                if (otherLeaves.length > 0) {
-                    hasOverlapOverall = true;
-                    const details = otherLeaves.map(l => `${l.staffName}(${l.slot === 'FULL' ? '全日' : l.slot})`).join(', ');
-                    msg += `• ${dateStr}：⚠️ 與 ${details} 重疊\n`;
-                } else {
-                    msg += `• ${dateStr}：✅ 無其他人請假\n`;
+                if (dayOfWeek !== 0 && dayOfWeek !== 6 && !window.AppState.holidays[dateStr]) {
+                    const existingLeaves = getLeavesOnDate(dateStr).filter(r => r.staffName !== staffName);
+                    if (existingLeaves.length > 0) {
+                        const others = existingLeaves.map(r => `${r.staffName}(${r.slot === 'FULL' ? '全日' : r.slot})`).join('、');
+                        msg += `• ${dateStr}: ⚠️ 重疊 (${others})\n`;
+                        totalOverlap++;
+                    } else {
+                        msg += `• ${dateStr}: 正常 (無其他人請假)\n`;
+                    }
                 }
-            });
-
-            if (!hasOverlapOverall) {
-                msg += `\n🎉 該段期間完全沒有與其他同事的假期重疊！`;
+                cur.setDate(cur.getDate() + 1);
             }
 
-            currentShareText = msg;
+            if (totalOverlap === 0) {
+                msg += `（所選期間無任何重疊同事）\n`;
+            }
+
             document.getElementById('whatsapp-share-content').value = msg;
-            document.getElementById('modal-share-text').classList.remove('hidden');
         }
 
-        // Open WhatsApp directly with pre-filled message
+        // WhatsApp trigger
         function shareToWhatsApp() {
-            const encoded = encodeURIComponent(currentShareText);
-            window.open(`https://api.whatsapp.com/send?text=${encoded}`, '_blank');
+            const text = encodeURIComponent(document.getElementById('whatsapp-share-content').value);
+            window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
         }
 
-        // Copy text to clipboard
+        // Copy text helper
         function copyWhatsAppText() {
             const textarea = document.getElementById('whatsapp-share-content');
             textarea.select();
             document.execCommand('copy');
-            alert('已成功複製 WhatsApp 訊息內容！');
+            alert('成功複製請假資訊！');
         }
 
-        // Render Cancel Leave List (Future records only)
+        // Render Cancel Leave List
         function renderCancelLeaveList() {
-            const container = document.getElementById('cancel-leave-list');
-            container.innerHTML = '';
+            const listEl = document.getElementById('cancel-leave-list');
+            listEl.innerHTML = '';
+            const currUser = window.AppState.currentUser;
+            if (!currUser) return;
 
-            const todayStr = new Date().toISOString().split('T')[0];
-            const myFutureLeaves = window.AppState.leaveRecords.filter(r =>
-                r.staffName === window.AppState.currentUser.name && r.startDate >= todayStr
-            );
+            const today = new Date().toISOString().split('T')[0];
+            const futureLeaves = window.AppState.leaveRecords.filter(r => r.staffName === currUser.name && r.startDate >= today);
 
-            if (myFutureLeaves.length === 0) {
-                container.innerHTML = `<p class="text-xs text-slate-400 py-6 text-center">目前沒有未來的請假紀錄可供取消。</p>`;
+            if (futureLeaves.length === 0) {
+                listEl.innerHTML = `<div class="text-center text-slate-400 py-8 text-xs bg-slate-50 rounded-2xl border border-slate-100">沒有未來的請假紀錄可供取消</div>`;
                 return;
             }
 
-            myFutureLeaves.forEach(r => {
-                const card = document.createElement('div');
-                card.className = 'bg-white p-4 rounded-2xl border border-slate-200 flex justify-between items-center shadow-sm';
-                card.innerHTML = `
+            futureLeaves.forEach(r => {
+                const item = document.createElement('div');
+                item.className = 'bg-white border border-slate-200 p-3 rounded-2xl flex justify-between items-center shadow-sm';
+                const slotText = r.slot === 'FULL' ? '全日' : r.slot;
+                item.innerHTML = `
                     <div>
-                        <div class="font-bold text-slate-800 text-sm">${r.leaveType} (${r.slot})</div>
-                        <div class="text-xs text-slate-500 mt-0.5">${r.startDate} 至 ${r.endDate}</div>
+                        <span class="font-bold text-slate-800 text-xs block">${r.startDate} 至 ${r.endDate} (${slotText})</span>
+                        <span class="text-[10px] text-indigo-600 font-medium">${r.leaveType}</span>
                     </div>
-                    <button onclick="deleteLeaveRecord('${r.id}')" class="bg-rose-50 text-rose-600 border border-rose-100 hover:bg-rose-100 text-xs px-3 py-1.5 rounded-xl font-medium transition">
-                        取消請假
+                    <button onclick="handleCancelLeave('${r.id}')" class="bg-rose-50 hover:bg-rose-100 text-rose-600 px-3 py-1.5 rounded-xl text-xs font-semibold transition">
+                        取消
                     </button>
                 `;
-                container.appendChild(card);
+                listEl.appendChild(item);
             });
         }
 
-        // Delete leave record
-        function deleteLeaveRecord(recordId) {
+        // Handle Cancel Leave
+        async function handleCancelLeave(recordId) {
             if (confirm('確定要取消這項請假紀錄嗎？')) {
-                const db = window.AppState.db;
-                const appId = window.AppState.appId;
-                const recRef = window.AppState.ref(db, `artifacts/${appId}/public/data/leaves/${recordId}`);
-                window.AppState.remove(recRef).then(() => {
-                    alert('已成功取消假期！');
-                    renderCancelLeaveList();
-                });
+                try {
+                    const appId = window.AppState.appId || 'product-leave-system-v1';
+                    const recRef = window.AppState.ref(window.AppState.db, `artifacts/${appId}/public/data/leaves/${recordId}`);
+                    await window.AppState.remove(recRef);
+                    alert('假期已成功取消！');
+                } catch (e) {
+                    alert('取消失敗：' + e.message);
+                }
             }
         }
 
-        // Render Admin Staff List
-        function renderAdminStaffList() {
-            const container = document.getElementById('admin-staff-list');
-            container.innerHTML = '';
-
-            if (window.AppState.staffList.length === 0) {
-                container.innerHTML = `<p class="text-xs text-slate-400 py-2">未有同事資料</p>`;
-                return;
-            }
-
-            window.AppState.staffList.forEach(s => {
-                const card = document.createElement('div');
-                card.className = 'bg-white p-3 rounded-xl border border-slate-200 flex justify-between items-center text-xs';
-                card.innerHTML = `
-                    <div>
-                        <span class="font-bold text-slate-800">${s.name}</span>
-                        <span class="text-slate-400 ml-2">(密碼: ****)</span>
-                    </div>
-                    <button onclick="handleDeleteStaff('${s.id}', '${s.name}')" class="text-rose-600 hover:bg-rose-50 px-2 py-1 rounded-lg">
-                        <i class="fa-solid fa-trash-can mr-1"></i>刪除
-                    </button>
-                `;
-                container.appendChild(card);
-            });
-        }
-
-        // Add Staff
-        function handleAddStaff() {
+        // Admin: Add Staff
+        async function handleAddStaff() {
             const name = document.getElementById('admin-add-name').value.trim();
             const password = document.getElementById('admin-add-password').value.trim();
 
             if (!name || !password) {
-                alert('請輸入完整的同事名稱及密碼！');
+                alert('請填寫同事名稱及密碼！');
                 return;
             }
 
-            if (window.AppState.staffList.some(s => s.name === name)) {
-                alert('已有同名的同事！');
-                return;
-            }
+            try {
+                const appId = window.AppState.appId || 'product-leave-system-v1';
+                const staffRef = window.AppState.ref(window.AppState.db, `artifacts/${appId}/public/data/staff`);
+                const newRef = window.AppState.push(staffRef);
+                await window.AppState.set(newRef, { name, password });
 
-            const db = window.AppState.db;
-            const appId = window.AppState.appId;
-            const staffRef = window.AppState.ref(db, `artifacts/${appId}/public/data/staff`);
-            const newStaffRef = window.AppState.push(staffRef);
-
-            window.AppState.set(newStaffRef, { name, password }).then(() => {
                 document.getElementById('admin-add-name').value = '';
                 document.getElementById('admin-add-password').value = '';
                 alert('已成功新增同事！');
-            }).catch(err => {
-                console.error("Add staff failed:", err);
-                alert("新增同事失敗！\n錯誤原因: " + (err.message || err.code || err));
-            });
-        }
-
-        // Delete Staff & Associated Leave Records
-        function handleDeleteStaff(staffId, staffName) {
-            if (confirm(`確定要刪除同事「${staffName}」嗎？這將會同時清除該同事的所有請假紀錄！`)) {
-                const db = window.AppState.db;
-                const appId = window.AppState.appId;
-                
-                // Remove Staff Document
-                const staffDocRef = window.AppState.ref(db, `artifacts/${appId}/public/data/staff/${staffId}`);
-                window.AppState.remove(staffDocRef);
-
-                // Remove Associated Leaves
-                const userLeaves = window.AppState.leaveRecords.filter(r => r.staffName === staffName);
-                userLeaves.forEach(l => {
-                    const leafRef = window.AppState.ref(db, `artifacts/${appId}/public/data/leaves/${l.id}`);
-                    window.AppState.remove(leafRef);
-                });
-
-                alert('已刪除該同事及其請假紀錄！');
+            } catch (e) {
+                alert('新增失敗：' + e.message);
             }
         }
 
-        // Render Admin Leave Records Management List
+        // Admin: Render Staff List
+        function renderAdminStaffList() {
+            const listEl = document.getElementById('admin-staff-list');
+            listEl.innerHTML = '';
+
+            if (window.AppState.staffList.length === 0) {
+                listEl.innerHTML = `<div class="text-center text-slate-400 py-4 text-xs">暫無同事紀錄</div>`;
+                return;
+            }
+
+            window.AppState.staffList.forEach(s => {
+                const item = document.createElement('div');
+                item.className = 'bg-white border border-slate-200 p-3 rounded-2xl flex justify-between items-center';
+                item.innerHTML = `
+                    <span class="font-bold text-slate-800 text-xs">${s.name}</span>
+                    <button onclick="handleDeleteStaff('${s.id}', '${s.name}')" class="text-xs bg-rose-50 text-rose-600 px-3 py-1.5 rounded-xl font-semibold hover:bg-rose-100 transition">
+                        刪除
+                    </button>
+                `;
+                listEl.appendChild(item);
+            });
+        }
+
+        // Admin: Delete Staff & Records
+        async function handleDeleteStaff(staffId, staffName) {
+            if (confirm(`確定要刪除同事「${staffName}」嗎？這同時會刪除該同事所有的請假紀錄！`)) {
+                try {
+                    const appId = window.AppState.appId || 'product-leave-system-v1';
+                    // Delete staff entry
+                    const staffRef = window.AppState.ref(window.AppState.db, `artifacts/${appId}/public/data/staff/${staffId}`);
+                    await window.AppState.remove(staffRef);
+
+                    // Delete leaves associated with staff
+                    const leavesToDelete = window.AppState.leaveRecords.filter(r => r.staffName === staffName);
+                    for (let r of leavesToDelete) {
+                        const recRef = window.AppState.ref(window.AppState.db, `artifacts/${appId}/public/data/leaves/${r.id}`);
+                        await window.AppState.remove(recRef);
+                    }
+
+                    alert('同事及其請假紀錄已成功刪除！');
+                } catch (e) {
+                    alert('刪除失敗：' + e.message);
+                }
+            }
+        }
+
+        // Admin: Render Leaves List
         function renderAdminLeavesList() {
-            const container = document.getElementById('admin-records-list');
-            container.innerHTML = '';
+            const listEl = document.getElementById('admin-records-list');
+            listEl.innerHTML = '';
 
             if (window.AppState.leaveRecords.length === 0) {
-                container.innerHTML = `<p class="text-xs text-slate-400 py-6 text-center">目前沒有任何請假紀錄。</p>`;
+                listEl.innerHTML = `<div class="text-center text-slate-400 py-8 text-xs bg-slate-50 rounded-2xl border border-slate-100">暫無請假紀錄</div>`;
                 return;
             }
 
             window.AppState.leaveRecords.forEach(r => {
-                const card = document.createElement('div');
-                card.className = 'bg-white p-3.5 rounded-2xl border border-slate-200 flex justify-between items-center text-xs shadow-sm';
-                card.innerHTML = `
+                const item = document.createElement('div');
+                item.className = 'bg-white border border-slate-200 p-3 rounded-2xl flex justify-between items-center shadow-sm';
+                const slotText = r.slot === 'FULL' ? '全日' : r.slot;
+                item.innerHTML = `
                     <div>
-                        <div class="font-bold text-slate-800">${r.staffName} - ${r.leaveType}</div>
-                        <div class="text-slate-500 text-[11px] mt-0.5">${r.startDate} 至 ${r.endDate} (${r.slot})</div>
+                        <div class="flex items-center space-x-2">
+                            <span class="font-bold text-slate-800 text-xs">${r.staffName}</span>
+                            <span class="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-medium">${r.leaveType}</span>
+                        </div>
+                        <span class="text-[10px] text-slate-500 block mt-0.5">${r.startDate} 至 ${r.endDate} (${slotText})</span>
                     </div>
-                    <button onclick="deleteLeaveRecord('${r.id}')" class="text-rose-600 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-xl font-medium transition">
-                        刪除紀錄
+                    <button onclick="handleCancelLeave('${r.id}')" class="text-xs bg-rose-50 text-rose-600 px-3 py-1.5 rounded-xl font-semibold hover:bg-rose-100 transition">
+                        刪除
                     </button>
                 `;
-                container.appendChild(card);
+                listEl.appendChild(item);
             });
         }
     </script>
