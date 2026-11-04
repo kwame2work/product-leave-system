@@ -55,6 +55,7 @@
 
         // Global Application State
         window.AppState = {
+            appId: 'product-leave-system-v1',
             currentUser: null, // { name: string, isAdmin: boolean }
             staffList: [],     // Array of staff { id, name, password }
             leaveRecords: [],  // Array of leave records { id, staffName, startDate, endDate, slot, leaveType }
@@ -93,7 +94,7 @@
             window.AppState.remove = remove;
 
             // Realtime Listener for Staff
-            const staffRef = ref(db, `artifacts/${appId}/public/data/staff`);
+            const staffRef = ref(db, `artifacts/${window.AppState.appId}/public/data/staff`);
             onValue(staffRef, (snapshot) => {
                 const data = snapshot.val();
                 const list = [];
@@ -110,7 +111,7 @@
             });
 
             // Realtime Listener for Leave Records
-            const leavesRef = ref(db, `artifacts/${appId}/public/data/leaves`);
+            const leavesRef = ref(db, `artifacts/${window.AppState.appId}/public/data/leaves`);
             onValue(leavesRef, (snapshot) => {
                 const data = snapshot.val();
                 const list = [];
@@ -908,6 +909,7 @@
             };
 
             const db = window.AppState.db;
+            const appId = window.AppState.appId;
             const leavesRef = window.AppState.ref(db, `artifacts/${appId}/public/data/leaves`);
             const newLeafRef = window.AppState.push(leavesRef);
             
@@ -1005,6 +1007,7 @@
         function deleteLeaveRecord(recordId) {
             if (confirm('確定要取消這項請假紀錄嗎？')) {
                 const db = window.AppState.db;
+                const appId = window.AppState.appId;
                 const recRef = window.AppState.ref(db, `artifacts/${appId}/public/data/leaves/${recordId}`);
                 window.AppState.remove(recRef).then(() => {
                     alert('已成功取消假期！');
@@ -1055,6 +1058,7 @@
             }
 
             const db = window.AppState.db;
+            const appId = window.AppState.appId;
             const staffRef = window.AppState.ref(db, `artifacts/${appId}/public/data/staff`);
             const newStaffRef = window.AppState.push(staffRef);
 
@@ -1072,6 +1076,7 @@
         function handleDeleteStaff(staffId, staffName) {
             if (confirm(`確定要刪除同事「${staffName}」嗎？這將會同時清除該同事的所有請假紀錄！`)) {
                 const db = window.AppState.db;
+                const appId = window.AppState.appId;
                 
                 // Remove Staff Document
                 const staffDocRef = window.AppState.ref(db, `artifacts/${appId}/public/data/staff/${staffId}`);
